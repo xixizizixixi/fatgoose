@@ -1,0 +1,64 @@
+{
+    "_readme": [
+        "This file locks the dependencies of your project to a known state",
+        "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
+        "This file is @generated automatically"
+    ],
+    "content-hash": "c2decb8603d69e76f39320edd6e57916",
+    "packages": [
+        {
+            "name": "pleonasm/bloom-filter",
+            "version": "1.0.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/pleonasm/bloom-filter.git",
+                "reference": "4a3292c9f83a778c44271bf4e4f6be1204b87f7b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/pleonasm/bloom-filter/zipball/4a3292c9f83a778c44271bf4e4f6be1204b87f7b",
+                "reference": "4a3292c9f83a778c44271bf4e4f6be1204b87f7b",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=5.4"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^4.8 || ^5.7 || ^6.4",
+                "satooshi/php-coveralls": "^1.0.1"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Pleo\\BloomFilter\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "BSD-2-Clause"
+            ],
+            "authors": [
+                {
+                    "name": "Matthew Nagi",
+                    "email": "matthew.nagi@base-2.net"
+                }
+            ],
+            "description": "A pure PHP implementation of a Bloom Filter",
+            "keywords": [
+                "Bloom Filter",
+                "bloom",
+                "filter",
+                "sets"
+            ],
+            "time": "2018-03-03T21:16:42+00:00"
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": [],
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": [],
+    "platform-dev": []
+}

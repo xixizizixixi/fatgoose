@@ -1,0 +1,12 @@
+{
+  "name": "xixizizixixi/fatgoose",
+  "license": "Apache-2.0",
+  "require": {
+    "pleonasm/bloom-filter": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "FG\\": "./"
+    }
+  }
+}
