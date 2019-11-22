@@ -1,8 +1,6 @@
 <?php
 namespace FG;
 
-require_once __DIR__.'/vendor/autoload.php';
-
 use Pleo\BloomFilter\BloomFilter;
 
 class FatGoose
