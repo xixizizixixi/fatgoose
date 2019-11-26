@@ -9,7 +9,10 @@
 
 + curl信息数组里面有什么可以看这个页面的"Return Values"部分 https://www.php.net/manual/en/function.curl-getinfo.php
 
-+ **onSuccess**    p1:curl信息数组 p2:抓取到的内容 [p3:自定义信息数组] [p4:pdo对象] 这个回调函数主要有两个作用：①对抓取到的内容进行分析，提取出自己想要的数据保存到数据库中②可以返回一个数组，里面的url会成为下一级别的抓取任务。形式：[ [url,url,......],false ] false改为true可临时无视布隆过滤器
++ **onSuccess**    p1:curl信息数组 p2:抓取到的内容 [p3:自定义信息数组] [p4:pdo对象] 这个回调函数主要有两个作用：①对抓取到的内容进行分析，提取出自己想要的数据保存到数据库中②可以返回一个数组，里面的url会成为下一级别的抓取任务。形式：
+    + [ [url,url,......],false ]  这种形式默认extraInfo为null
+    + [ [[url,extraInfo],[url,extraInfo],...... ],false ] 
+    + 上面false改为true可临时无视布隆过滤器
 
 + **onSuccessWithUnexpectedCode** p1:curl信息数组 [p2:自定义信息数组] [p3:pdo对象]
 

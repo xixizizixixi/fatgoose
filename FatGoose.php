@@ -132,9 +132,10 @@ CREATE TABLE IF NOT EXISTS $taskTableName (
  `url` varchar(4096) NOT NULL,
  `level` tinyint(3) unsigned NOT NULL COMMENT '任务级别',
  `state` tinyint(3) unsigned NOT NULL COMMENT '0：未分配；1：已分配；6：成功抓取；7：成功抓取但状态码不符合预期；9:抓取失败',
- `httpcode` smallint(5) unsigned DEFAULT NULL COMMENT '响应状态码',
- `errorno` int(11) DEFAULT NULL COMMENT '错误号',
- `errorinfo` varchar(4096) DEFAULT NULL COMMENT '错误信息',
+ `http_code` smallint(5) unsigned DEFAULT NULL COMMENT '响应状态码',
+ `errno` int(11) DEFAULT NULL COMMENT '错误号',
+ `errinfo` varchar(4096) DEFAULT NULL COMMENT '错误信息',
+ `extra_info` varbinary(1024) DEFAULT NULL COMMENT '额外信息',
  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 STR;
@@ -153,9 +154,9 @@ CREATE TABLE IF NOT EXISTS $monitorTableName (
  `url` varchar(4096) NOT NULL,
  `level` tinyint(3) unsigned NOT NULL COMMENT '监视器任务级别',
  `state` tinyint(3) unsigned NOT NULL DEFAULT '0' COMMENT '0：本轮监视未分配 1：本轮监视已分配',
- `httpcode` smallint(5) unsigned DEFAULT NULL COMMENT '响应状态码',
- `errorno` int(11) DEFAULT NULL COMMENT '错误号',
- `errorinfo` varchar(4096) DEFAULT NULL COMMENT '错误信息',
+ `http_code` smallint(5) unsigned DEFAULT NULL COMMENT '响应状态码',
+ `errno` int(11) DEFAULT NULL COMMENT '错误号',
+ `errinfo` varchar(4096) DEFAULT NULL COMMENT '错误信息',
  `crawl_id` int(10) unsigned DEFAULT NULL COMMENT '对应抓取任务的id',
  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8
@@ -178,43 +179,55 @@ STR;
             //下面几个是抓取任务表用的
             "queryTask"=>$this->pdo->prepare("SELECT * FROM {$this->taskTableName} WHERE state=0 LIMIT 1 FOR UPDATE"),
             "updateTask"=>$this->pdo->prepare("UPDATE {$this->taskTableName} SET state=? WHERE id=?"),
-            "updateTaskWithUnexpectedCode"=>$this->pdo->prepare("UPDATE {$this->taskTableName} SET state=?,httpcode=? WHERE id=?"),
-            "updateTaskWithFail"=>$this->pdo->prepare("UPDATE {$this->taskTableName} SET state=?,errorno=?,errorinfo=? WHERE id=?"),
-            "insertTask"=>$this->pdo->prepare("INSERT INTO {$this->taskTableName} (id,url,level,state) VALUES (null,?,?,0)"),
+            "updateTaskWithUnexpectedCode"=>$this->pdo->prepare("UPDATE {$this->taskTableName} SET state=?,http_code=? WHERE id=?"),
+            "updateTaskWithFail"=>$this->pdo->prepare("UPDATE {$this->taskTableName} SET state=?,errno=?,errinfo=? WHERE id=?"),
+            "insertTask"=>$this->pdo->prepare("INSERT INTO {$this->taskTableName} (id,url,level,state,extra_info) VALUES (null,?,?,0,?)"),
             //下面几个是历史url表用的
             "insertHistoryUrl"=>$this->pdo->prepare("INSERT INTO {$this->historyUrlsTableName} (url) VALUES (?)"),
             //下面几个是监视器任务表用的
             "queryMonitorTask"=>$this->pdo->prepare("SELECT * FROM {$this->monitorTableName} WHERE state=0 LIMIT 1 FOR UPDATE"),
             "updateMonitorTask"=>$this->pdo->prepare("UPDATE {$this->monitorTableName} SET state=? WHERE id=?"),
             "updateAllMonitorTask"=>$this->pdo->prepare("UPDATE {$this->monitorTableName} SET state=0"),
-            "updateMonitorTaskOther"=>$this->pdo->prepare("UPDATE {$this->monitorTableName} SET httpcode=?,errorno=?,errorinfo=? WHERE id=?"),
+            "updateMonitorTaskOther"=>$this->pdo->prepare("UPDATE {$this->monitorTableName} SET http_code=?,errno=?,errinfo=? WHERE id=?"),
         ];
 
     }
 
-    //用于添加抓取任务 $taskUrl:[ [url,level],[url,level],...... ]，第二个参数为true可临时无视布隆过滤器
+
+    //用于添加抓取任务
+    //$taskArr:[ [[url,extraInfo],level],[[url,extraInfo],level],...... ]，第二个参数为true可临时无视布隆过滤器
+    //如果$taskArr是 [[url,level],[url,level],......]这样的形式则默认extraInfo为null
     public function addTask($taskArr,bool $ignoreBloomfilter=false)
     {
+
         //开始处理
         foreach($taskArr as $task)
         {
+            if(!is_array($task[0])) //如果是[url,level]而非[[url,extraInfo],level]则转换为标准形式
+            {
+                $task=[[$task[0],null],$task[1]];
+            }
+            
+            //如果extraInfo是个数组则序列化，否则设置为null
+            $extraInfo=is_array($task[0][1]) ? (serialize($task[0][1])) : null;
+
             //如果无视布隆过滤器开启或临时无视了布隆过滤器
             if($this->config['ignore_bloom_filter']||$ignoreBloomfilter)
             {
                 //抓取任务表、历史url记录表、当前布隆过滤器三个地方都要追加
-                $this->preparedPdoStatement['insertTask']->execute([$task[0],$task[1]]);
-                $this->preparedPdoStatement['insertHistoryUrl']->execute([$task[0]]);
-                $this->bloomfilter->add($task[0]);
+                $this->preparedPdoStatement['insertTask']->execute([$task[0][0],$task[1],$extraInfo]);
+                $this->preparedPdoStatement['insertHistoryUrl']->execute([$task[0][0]]);
+                $this->bloomfilter->add($task[0][0]);
             }
             else
             {
                 //布隆过滤器里面要没有这个条目，有这个条目则什么也不做
-                if(!($this->bloomfilter->exists($task[0])))
+                if(!($this->bloomfilter->exists($task[0][0])))
                 {
                     //抓取任务表、历史url记录表、当前布隆过滤器三个地方都要追加
-                    $this->preparedPdoStatement['insertTask']->execute([$task[0],$task[1]]);
-                    $this->preparedPdoStatement['insertHistoryUrl']->execute([$task[0]]);
-                    $this->bloomfilter->add($task[0]);
+                    $this->preparedPdoStatement['insertTask']->execute([$task[0][0],$task[1],$extraInfo]);
+                    $this->preparedPdoStatement['insertHistoryUrl']->execute([$task[0][0]]);
+                    $this->bloomfilter->add($task[0][0]);
                 }
             }
         }
@@ -332,6 +345,10 @@ STR;
             $task=$this->allocateTask();//分配一个任务,$task是个数组
             if($task) //要是个有效的任务，不能是null
             {
+                if(isset($task['extra_info']))//如果这个字段不为null,需要反序列化为数组，因为保存的是字节串
+                {
+                    $task['extra_info']=unserialize($task['extra_info']);
+                }
 
                 //创建curl资源、设置抓取选项，填充映射数组等准备活动
                 curl_multi_add_handle($mCurlRes, $this->createCurlRes($task,$resCustomInfoMapArr));
@@ -382,6 +399,8 @@ STR;
                         //几级任务调用几级抓取成功的回调函数
                         if(is_callable($this->callbacksArr[$level][0]))
                         {
+                            //返回值是以下两种形式都可以
+                            //$newUrlsArr:[ [[url,extraInfo],[url,extraInfo],...... ],false ] false改为true可临时无视布隆过滤器
                             //$newUrlsArr:[[url,url,......],false] false改为true可临时无视布隆过滤器
                             $newUrlsArr=$this->callbacksArr[$level][0]($curlInfo,$content,$customInfoArr,$this->pdo);
                             if(is_array($newUrlsArr))//如果是数组，则生成下一级别的任务
@@ -392,6 +411,7 @@ STR;
                                    //为了调用addTask()，构建合适的数组结构
                                     $newUrlsArrPrepared[]=[$newUrl,$level+1];
                                 }
+
                                 $this->addTask($newUrlsArrPrepared,$newUrlsArr[1]);
                             }
                         }
@@ -446,9 +466,9 @@ STR;
                                     $this->callbacksArr[$level][2]($curlInfo['url'],curl_error($curlRes),$info['result'],$customInfoArr,$this->pdo);
                                 }
                                 //更新任务状态
-                                $errorno=$info['result'];
-                                $errorinfo=curl_error($curlRes);
-                                $this->preparedPdoStatement['updateTaskWithFail']->execute([9,$errorno,$errorinfo,$customInfoArr['task']['id']]);
+                                $errno=$info['result'];
+                                $errinfo=curl_error($curlRes);
+                                $this->preparedPdoStatement['updateTaskWithFail']->execute([9,$errno,$errinfo,$customInfoArr['task']['id']]);
                                 unset($retryArr[$urlIndex]);//从重试数组中删除这一项，避免数组越来越大
                                 $retryArr=array_values($retryArr);//重排索引
                             }
@@ -461,9 +481,9 @@ STR;
                             $this->callbacksArr[$level][2]($curlInfo['url'],curl_error($curlRes),$info['result'],$customInfoArr,$this->pdo);
                         }
                         //更新任务状态
-                        $errorno=$info['result'];
-                        $errorinfo=curl_error($curlRes);
-                        $this->preparedPdoStatement['updateTaskWithFail']->execute([9,$errorno,$errorinfo,$customInfoArr['task']['id']]);
+                        $errno=$info['result'];
+                        $errinfo=curl_error($curlRes);
+                        $this->preparedPdoStatement['updateTaskWithFail']->execute([9,$errno,$errinfo,$customInfoArr['task']['id']]);
                     }
                 }
                 //不管是否出错，都清理资源和自定义信息映射数组，避免越来越大
@@ -482,6 +502,11 @@ STR;
                 $task=$this->allocateTask();//分配一个任务,$task是个数组
                 if($task) //要是个有效的任务，不能是null
                 {
+                    if(isset($task['extra_info']))//如果这个字段不为null,需要反序列化为数组，因为保存的是字节串
+                    {
+                        $task['extra_info']=unserialize($task['extra_info']);
+                    }
+
                     curl_multi_add_handle($mCurlRes, $this->createCurlRes($task,$resCustomInfoMapArr));
                     $resNum++; //资源数量+1
                 }
@@ -547,6 +572,11 @@ STR;
             $task=$this->allocateMonitorTask();//分配一个监视任务
             if($task) //要是个有效的任务，不能是null
             {
+                if(isset($task['extra_info']))//如果这个字段不为null,需要反序列化为数组，因为保存的是字节串
+                {
+                    $task['extra_info']=unserialize($task['extra_info']);
+                }
+
                 //创建curl资源、设置抓取选项，并做一些准备活动
                 curl_multi_add_handle($mCurlRes, $this->createCurlRes($task,$resCustomInfoMapArr));
                 $resNum++; //资源数量+1
@@ -593,6 +623,7 @@ STR;
                                     //为了调用addTask()，构建合适的数组结构
                                     $newUrlsArrPrepared[]=[$newUrl,$level+1];
                                 }
+
                                 $this->addTask($newUrlsArrPrepared,$newUrlsArr[1]);
                             }
                             elseif($newUrlsArr===true) //true则表示更新抓取任务表中的对应任务状态为0（未分配）
@@ -637,9 +668,9 @@ STR;
                             else
                             {
                                 //更新任务状态
-                                $errorno=$info['result'];
-                                $errorinfo=curl_error($curlRes);
-                                $this->preparedPdoStatement['updateMonitorTaskOther']->execute([null,$errorno,$errorinfo,$customInfoArr['task']['id']]);
+                                $errno=$info['result'];
+                                $errinfo=curl_error($curlRes);
+                                $this->preparedPdoStatement['updateMonitorTaskOther']->execute([null,$errno,$errinfo,$customInfoArr['task']['id']]);
                                 unset($retryArr[$urlIndex]);//从重试数组中删除这一项，避免数组越来越大
                                 $retryArr=array_values($retryArr);//重排索引
                             }
@@ -648,9 +679,9 @@ STR;
                     else
                     {
                         //更新任务状态
-                        $errorno=$info['result'];
-                        $errorinfo=curl_error($curlRes);
-                        $this->preparedPdoStatement['updateMonitorTaskOther']->execute([null,$errorno,$errorinfo,$customInfoArr['task']['id']]);
+                        $errno=$info['result'];
+                        $errinfo=curl_error($curlRes);
+                        $this->preparedPdoStatement['updateMonitorTaskOther']->execute([null,$errno,$errinfo,$customInfoArr['task']['id']]);
                     }
                 }
                 //不管是否出错，都清理资源任务对应关系数组，避免越来越大
@@ -668,6 +699,11 @@ STR;
                 $task=$this->allocateMonitorTask();//分配一个监视任务
                 if($task) //要是个有效的任务，不能是null
                 {
+                    if(isset($task['extra_info']))//如果这个字段不为null,需要反序列化为数组，因为保存的是字节串
+                    {
+                        $task['extra_info']=unserialize($task['extra_info']);
+                    }
+
                     curl_multi_add_handle($mCurlRes, $this->createCurlRes($task,$resCustomInfoMapArr));
                     $resNum++; //资源数量+1
 
