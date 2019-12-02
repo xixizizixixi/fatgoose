@@ -12,7 +12,10 @@
 + **onSuccess**    p1:curl信息数组 p2:抓取到的内容 [p3:自定义信息数组] [p4:pdo对象] 这个回调函数主要有两个作用：①对抓取到的内容进行分析，提取出自己想要的数据保存到数据库中②可以返回一个数组，里面的url会成为下一级别的抓取任务。形式：
     + [ [url,url,......],false ]  这种形式默认extraInfo为null
     + [ [[url,extraInfo],[url,extraInfo],...... ],false ] 
+    + 上面的extraInfo是个关联数组
     + 上面false改为true可临时无视布隆过滤器
+
+③返回\"reset\"重置任务，\"ignore\"跳过任务
 
 + **onSuccessWithUnexpectedCode** p1:curl信息数组 [p2:自定义信息数组] [p3:pdo对象]
 

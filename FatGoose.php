@@ -399,7 +399,7 @@ STR;
                         //几级任务调用几级抓取成功的回调函数
                         if(is_callable($this->callbacksArr[$level][0]))
                         {
-                            //返回值是以下两种形式都可以
+                            //返回值是以下两种形式都可以 还可以是reset和ignore
                             //$newUrlsArr:[ [[url,extraInfo],[url,extraInfo],...... ],false ] false改为true可临时无视布隆过滤器
                             //$newUrlsArr:[[url,url,......],false] false改为true可临时无视布隆过滤器
                             $newUrlsArr=$this->callbacksArr[$level][0]($curlInfo,$content,$customInfoArr,$this->pdo);
@@ -413,10 +413,29 @@ STR;
                                 }
 
                                 $this->addTask($newUrlsArrPrepared,$newUrlsArr[1]);
+                                //更新任务状态为抓取成功
+                                $this->preparedPdoStatement['updateTask']->execute([6,$customInfoArr['task']['id']]);
+
+                            }
+                            elseif($newUrlsArr=='reset') //返回reset表示要重置任务
+                            {
+                                $this->preparedPdoStatement['updateTask']->execute([0,$customInfoArr['task']['id']]);
+                            }
+                            elseif($newUrlsArr=='ignore')//返回ignore表示先跳过任务，任务状态会保持在1
+                            {
+                                //什么也不做，跳过任务
+                            }
+                            else
+                            {
+                                //更新任务状态为抓取成功
+                                $this->preparedPdoStatement['updateTask']->execute([6,$customInfoArr['task']['id']]);
                             }
                         }
-                        //更新任务状态
-                        $this->preparedPdoStatement['updateTask']->execute([6,$customInfoArr['task']['id']]);
+                        else//没有定义抓取成功的回调函数
+                        {
+                            //更新任务状态为抓取成功
+                            $this->preparedPdoStatement['updateTask']->execute([6,$customInfoArr['task']['id']]);
+                        }
                     }
                     else
                     {
