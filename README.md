@@ -19,6 +19,8 @@
 
 + **onSuccessWithUnexpectedCode** p1:curl信息数组 [p2:自定义信息数组] [p3:pdo对象]
 
+返回\"reset\"重置任务
+
 + **onFail** p1:目标url p2:错误消息 p3:错误码 [p4：自定义信息数组] [p5:pdo对象]
 
 ## 数据去重(布隆过滤器)

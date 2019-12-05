@@ -176,7 +176,8 @@ CREATE TABLE IF NOT EXISTS $taskTableName (
  `errno` int(11) DEFAULT NULL COMMENT '错误号',
  `errinfo` varchar(4096) DEFAULT NULL COMMENT '错误信息',
  `extra_info` varbinary(1024) DEFAULT NULL COMMENT '额外信息',
- PRIMARY KEY (`id`)
+ PRIMARY KEY (`id`),
+ KEY `state` (`state`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 STR;
         $this->pdo->exec($createTableSql);
@@ -463,6 +464,7 @@ STR;
                             }
                             elseif($newUrlsArr=='reset') //返回reset表示要重置任务
                             {
+
                                 $this->preparedPdoStatement['updateTask']->execute([0,$customInfoArr['task']['id']]);
                             }
                             elseif($newUrlsArr=='ignore')//返回ignore表示先跳过任务，任务状态会保持在1
@@ -481,15 +483,28 @@ STR;
                             $this->preparedPdoStatement['updateTask']->execute([6,$customInfoArr['task']['id']]);
                         }
                     }
-                    else
+                    else //响应状态码不是200
                     {
 
                         if(is_callable($this->callbacksArr[$level][1]))
                         {
-                            $this->callbacksArr[$level][1]($curlInfo,$customInfoArr,$this->pdo);
+                            $returnString=$this->callbacksArr[$level][1]($curlInfo,$customInfoArr,$this->pdo);
+                            if($returnString=='reset')//重置任务
+                            {
+                                $this->preparedPdoStatement['updateTask']->execute([0,$customInfoArr['task']['id']]);
+
+                            }
+                            else
+                            {
+                                //更新任务状态
+                                $this->preparedPdoStatement['updateTaskWithUnexpectedCode']->execute([7,$responseCode,$customInfoArr['task']['id']]);
+                            }
                         }
-                        //更新任务状态
-                        $this->preparedPdoStatement['updateTaskWithUnexpectedCode']->execute([7,$responseCode,$customInfoArr['task']['id']]);
+                        else
+                        {
+                            //更新任务状态
+                            $this->preparedPdoStatement['updateTaskWithUnexpectedCode']->execute([7,$responseCode,$customInfoArr['task']['id']]);
+                        }
                     }
                 }
                 //出错了
