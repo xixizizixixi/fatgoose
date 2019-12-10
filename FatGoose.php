@@ -9,17 +9,23 @@ class FatGoose
     private $config=[
 
         //创建布隆过滤器时使用的预估条目数(确保添加到布隆过滤器中的条目数小于这个值)
-        'item_num'=>200000,
+        'item_num'=>1000000,
         //创建布隆过滤器时使用的误判几率
         'probability'=>0.0001,
         //无视布隆过滤器，开启时添加任务到任务表不会受到布隆过滤器的阻止
-        'ignore_bloom_filter'=>false,
+        'ignore_bf'=>false,
+        //是否使用布隆过滤器缓存文件
+        'use_bf_cache_file'=>false,
+        //布隆过滤器缓存文件的路径
+        'bf_cache_file_path'=>'/home/data_bf',
 
         //是否启用tor代理 这部分功能与 https://github.com/trimstray/multitor 项目配合使用
         //必须保证当前环境multitor已经正确安装配置并且已经创建了若干tor进程
         'use_tor'=>false,
 
-        'tor_ports_range'=>[20000,20009],//tor进程端口范围
+        //tor进程端口号和pid的映射数组 key是端口号 value是进程id
+        //形如 [20001=>1234,20002=>1235,20003=>1236,......]
+        'tor_ports_pids'=>[],
 
 
         //爬取失败重试次数
@@ -37,7 +43,7 @@ class FatGoose
         'monitor_interval'=>3600,
 
         //是否随机用户代理字符串
-        'random_user_agent'=>true,
+        'random_user_agent'=>false,
         //预定义的一系列用户代理字符串
         'user_agent'=>
             [
@@ -89,7 +95,7 @@ class FatGoose
                 //设置用户代理字符串
                 //百度蜘蛛 Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
                 //谷歌机器人 Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
-                CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36',
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
                 CURLOPT_HEADEROPT => CURLHEADER_UNIFIED, //向目标服务器和代理服务器的请求都使用CURLOPT_HTTPHEADER定义的请求头
                 //构建更加真实的请求头
                 CURLOPT_HTTPHEADER=> [
@@ -184,7 +190,9 @@ STR;
         //不存在抓取过的历史url表则创建
         $createTableSql=<<<"STR"
 CREATE TABLE IF NOT EXISTS $historyUrlsTableName (
- `url` varchar(4096) NOT NULL
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+ `url` varchar(4096) NOT NULL,
+ PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 STR;
         $this->pdo->exec($createTableSql);
@@ -204,16 +212,24 @@ CREATE TABLE IF NOT EXISTS $monitorTableName (
 STR;
         $this->pdo->exec($createTableSql);
         //创建好布隆过滤器对象
-        $pdostatement=$this->pdo->query("SELECT url From {$this->historyUrlsTableName}");
-        $urlsArr=$pdostatement->fetchAll(\PDO::FETCH_NUM);
-        $urlsArr=array_column($urlsArr,0);
-
-        $this->bloomfilter=BloomFilter::init($this->config['item_num'],$this->config['probability']);
-        foreach($urlsArr as $url)
+        $cacheFilePath=$this->config['bf_cache_file_path'];
+        //要使用缓存文件，并且缓存文件存在，则使用缓存文件来创建布隆过滤器对象
+        if($this->config['use_bf_cache_file'] && is_file($cacheFilePath))
         {
-            $this->bloomfilter->add($url);
+            $this->bloomfilter=BloomFilter::initFromJson(json_decode(file_get_contents($cacheFilePath), true));
         }
+        else
+        {
+            $pdostatement=$this->pdo->query("SELECT url From {$this->historyUrlsTableName}");
+            $urlsArr=$pdostatement->fetchAll(\PDO::FETCH_NUM);
+            $urlsArr=array_column($urlsArr,0);
 
+            $this->bloomfilter=BloomFilter::init($this->config['item_num'],$this->config['probability']);
+            foreach($urlsArr as $url)
+            {
+                $this->bloomfilter->add($url);
+            }
+        }
 
         //准备好一系列调用了prepare()的pdostatement对象
         $this->preparedPdoStatement=[
@@ -234,6 +250,17 @@ STR;
 
     }
 
+    //析构函数
+    public function __destruct()
+    {
+
+        //要使用缓存文件，则将布隆过滤器对象保存到缓存文件中
+        if($this->config['use_bf_cache_file'])
+        {
+            $jsonString=json_encode($this->bloomfilter);
+            file_put_contents($this->config['bf_cache_file_path'],$jsonString);
+        }
+    }
 
     //用于添加抓取任务
     //$taskArr:[ [[url,extraInfo],level],[[url,extraInfo],level],...... ]，第二个参数为true可临时无视布隆过滤器
@@ -253,7 +280,7 @@ STR;
             $extraInfo=is_array($task[0][1]) ? (serialize($task[0][1])) : null;
 
             //如果无视布隆过滤器开启或临时无视了布隆过滤器
-            if($this->config['ignore_bloom_filter']||$ignoreBloomfilter)
+            if($this->config['ignore_bf']||$ignoreBloomfilter)
             {
                 //抓取任务表、历史url记录表、当前布隆过滤器三个地方都要追加
                 $this->preparedPdoStatement['insertTask']->execute([$task[0][0],$task[1],$extraInfo]);
@@ -307,35 +334,6 @@ STR;
             return null;
         }
     }
-    //设置curl资源的选项数组
-    private function setCurlOptArr(&$curlResource,$optArr)
-    {
-        //如果使用tor代理，则需要设置好额外选项
-        if($this->config['use_tor'])
-        {
-            //如果tor代理端口数组为空，则需要填充
-            if(empty($this->torProxyPortsArr))
-            {
-                $tmpArr=[];
-                //根据配置文件中的tor端口范围创建tor端口数组
-                for($k=$this->config['tor_ports_range'][0];$k<=$this->config['tor_ports_range'][1];$k++)
-                {
-                    $tmpArr[]=$k;
-
-                }
-                $this->torProxyPortsArr=$tmpArr;
-            }
-
-            $optArr[CURLOPT_PROXYTYPE]=CURLPROXY_SOCKS5;
-            $optArr[CURLOPT_PROXY]='127.0.0.1';
-            $optArr[CURLOPT_PROXYPORT]=array_shift($this->torProxyPortsArr);
-            curl_setopt_array($curlResource,$optArr);
-        }
-        else //不使用tor代理走这里
-        {
-            curl_setopt_array($curlResource,$optArr);
-        }
-    }
 
     //创建curl资源，设置抓取选项，并进行一些准备工作，传入任务数组，引用传入资源和自定义信息映射数组
     //返回curl资源
@@ -345,11 +343,38 @@ STR;
         $curlRes = curl_init($task['url']);
         //用配置文件里面的选项数组初始化
         $optArr=$this->config['curl_opt'];
-        if($this->config['random_user_agent'])//设置随机用户代理字符串
+
+        //设置随机用户代理字符串
+        if($this->config['random_user_agent'])
         {
             $randomInt=rand(0,count($this->config['user_agent'])-1);//随机一个索引出来
             $optArr[CURLOPT_USERAGENT]=($this->config['user_agent'])[$randomInt];
         }
+
+        //设置tor代理相关选项
+        if($this->config['use_tor'])
+        {
+            //如果tor代理端口数组为空，则需要填充
+            if(empty($this->torProxyPortsArr))
+            {
+                $tmpArr=[];
+                foreach($this->config['tor_ports_pids'] as $k=>$v)
+                {
+                    $tmpArr[]=$k;
+                }
+                $this->torProxyPortsArr=$tmpArr;
+            }
+
+            $optArr[CURLOPT_PROXYTYPE]=CURLPROXY_SOCKS5;
+            $optArr[CURLOPT_PROXY]='127.0.0.1';
+            $currentPort=array_shift($this->torProxyPortsArr);
+            $optArr[CURLOPT_PROXYPORT]=$currentPort;
+            //填充自定义信息数组
+            $currentPid=($this->config['tor_ports_pids'])[$currentPort];
+            $customInfoArr['tor']=['port'=>$currentPort,'pid'=>$currentPid];
+        }
+
+
         /*填充信息数组，建立好当前curl资源和信息数组的映射关系*/
         $customInfoArr['task']=$task;//将任务数组添加到信息数组中
         //判断是否设置了回调函数专门为每个curl资源设置特定的选项
@@ -368,7 +393,7 @@ STR;
             }
         }
         $customInfoArr['opt']=$optArr;//将curl选项数组添加到信息数组中
-        $this->setCurlOptArr($curlRes,$optArr);//设置好当前资源的抓取选项
+        curl_setopt_array($curlRes,$optArr);
         //建立curl资源和信息数组的映射关系
         $resCustomInfoMapArr[]=[$curlRes,$customInfoArr];
         return $curlRes;//返回curl资源
@@ -381,7 +406,7 @@ STR;
         $retryArr=[]; //重试数组，格式为 [[url,重试次数],[url,重试次数]...]
 
         //资源和自定义资源信息数组的映射数组，格式[[资源,信息数组],[资源,信息数组]...]，信息数组是个关联数组
-        //目前信息数组里面已经有了'task'键保存任务数组，'opt'键保存抓取选项数组
+        //目前信息数组里面已经有了'task'键保存任务数组，'opt'键保存抓取选项数组,'tor'键保存一个数组['port'=>端口号,'pid'=>进程id]
         $resCustomInfoMapArr=[];
 
         //多少线程就分配多少任务
