@@ -37,10 +37,10 @@ class FatGoose
         //是否开启守护模式,周期性从抓取任务表中取任务进行抓取
         'daemon'=>false,
         //开启守护模式后间隔多少秒尝试进行一次爬取
-        'daemon_interval'=>7200,
+        'daemon_interval'=>86400,
 
         //监视器时间间隔
-        'monitor_interval'=>3600,
+        'monitor_interval'=>43200,
 
         //是否随机用户代理字符串
         'random_user_agent'=>false,
@@ -640,6 +640,15 @@ STR;
             while(true)
             {
                 $this->mCrawlWithMysql();//开始爬取
+
+                //爬完一波更新一下布隆过滤器缓存文件
+                //要使用缓存文件，则将布隆过滤器对象保存到缓存文件中
+                if($this->config['use_bf_cache_file'])
+                {
+                    $jsonString=json_encode($this->bloomfilter);
+                    file_put_contents($this->config['bf_cache_file_path'],$jsonString);
+                }
+
                 sleep($this->config['daemon_interval']);
             }
         }
@@ -653,9 +662,7 @@ STR;
         while(true)
         {
             $this->monitorMCrawlWithMysql();
-            //完成一轮监视后控制台输出一些信息
-            date_default_timezone_set("Asia/Shanghai");
-            echo "本轮监视已完成：".date("Y-m-d H:i:s");
+
             sleep($this->config['monitor_interval']); //暂停若干秒
         }
 
