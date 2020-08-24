@@ -112,7 +112,7 @@ class FatGoose
 
                 /*抓取https页面必要*/
                 //CURLOPT_SSL_VERIFYPEER=>true,
-                //CURLOPT_CAINFO=>'c:/cacert.pem',
+                //CURLOPT_CAINFO=>'/home/cacert.pem',
                 //CURLOPT_SSL_VERIFYHOST=>2,
             ],
         //默认数据库配置
@@ -154,7 +154,8 @@ class FatGoose
     //保存一个回调函数，自动传入自定义信息数组的引用，既可以使用信息数组里面的信息，也可以自己注入一些信息到信息数组中
     //既然参数是引用，所以在定义这个回调函数的时候一定要注意函数的形式
     //要求返回一个curl额外选项的数组
-    public $generateExtraCurlOpt;
+    //此回调函数在创建每个curl资源的时候都会调用，在此回调函数内部做好判断，只对特定资源添加额外curl选项和在自定义信息数组注入内容
+    private $generateExtraCurlOpt;
     //构造函数
     public function __construct(string $databaseName,string $taskTableName,string $historyUrlsTableName,string $monitorTableName,array $configOpt=[])
     {
@@ -449,8 +450,8 @@ STR;
                 $customInfoArr=$resCustomInfoMapArr[$index][1];
                 $level=$customInfoArr['task']['level'];
 
-                //看看当前资源对应的抓取选项，如果有CURLOPT_FILE，需关闭打开的文件
-                if(isset($customInfoArr['opt'][CURLOPT_FILE]))
+                //看看当前资源对应的抓取选项，如果有CURLOPT_FILE并且数据类型是个资源，需关闭打开的文件
+                if( isset($customInfoArr['opt'][CURLOPT_FILE]) && is_resource($customInfoArr['opt'][CURLOPT_FILE]) )
                 {
                     fclose($customInfoArr['opt'][CURLOPT_FILE]);
                 }
@@ -667,6 +668,13 @@ STR;
         }
 
     }
+
+    //注册用于产生额外curl选项的函数
+    public function registerFuncExtraCurlOpt(callable $func)
+    {
+        $this->generateExtraCurlOpt=$func;
+    }
+
     private function monitorMCrawlWithMysql()
     {
         $mCurlRes=curl_multi_init(); //多线程curl的资源
@@ -830,8 +838,10 @@ STR;
         //一轮监视完成以后，要将监视状态全部设置为未分配(0)，以便进行下一轮监视
         $this->preparedPdoStatement['updateAllMonitorTask']->execute();
     }
+
     /**
      * 多线程异步爬虫
+     * 此方法功能有所简化，主要用于简单的抓取和抓取测试
      * @param array|string $url 待抓取的目标页面
      * @param callable|null $onSuccess 抓取成功(状态码200)的回调函数
      * p1:curl信息数组 p2:抓取到的内容
@@ -862,7 +872,7 @@ STR;
             //设置用户代理字符串
             //百度蜘蛛 Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
             //谷歌机器人 Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
-            CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36',
+            CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
             CURLOPT_HEADEROPT => CURLHEADER_UNIFIED, //向目标服务器和代理服务器的请求都使用CURLOPT_HTTPHEADER定义的请求头
             //构建更加真实的请求头
             CURLOPT_HTTPHEADER=> [
