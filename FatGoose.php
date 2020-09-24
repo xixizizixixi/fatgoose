@@ -171,7 +171,7 @@ class FatGoose
         $dsn = "mysql:host={$this->config['database']['host']};port={$this->config['database']['port']}";
         $this->pdo=new \PDO($dsn,$this->config['database']['username'],$this->config['database']['password'],[\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
         //没有指定数据库和三个表，则创建
-        $this->pdo->exec("CREATE DATABASE IF NOT EXISTS $databaseName  DEFAULT CHARACTER SET utf8");
+        $this->pdo->exec("CREATE DATABASE IF NOT EXISTS $databaseName  DEFAULT CHARACTER SET utf8mb4");
         $this->pdo->exec("use {$databaseName}");
         $createTableSql=<<<"STR"
 CREATE TABLE IF NOT EXISTS $taskTableName (
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS $taskTableName (
  `extra_info` varbinary(1024) DEFAULT NULL COMMENT '额外信息',
  PRIMARY KEY (`id`),
  KEY `state` (`state`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 STR;
         $this->pdo->exec($createTableSql);
         //不存在抓取过的历史url表则创建
@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS $historyUrlsTableName (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
  `url` varchar(4096) NOT NULL,
  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 STR;
         $this->pdo->exec($createTableSql);
         //不存在监视任务表则创建
@@ -209,7 +209,7 @@ CREATE TABLE IF NOT EXISTS $monitorTableName (
  `errinfo` varchar(4096) DEFAULT NULL COMMENT '错误信息',
  `crawl_id` int(10) unsigned DEFAULT NULL COMMENT '对应抓取任务的id',
  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 STR;
         $this->pdo->exec($createTableSql);
         //创建好布隆过滤器对象
