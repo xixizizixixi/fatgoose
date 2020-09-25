@@ -175,12 +175,12 @@ class FatGoose
         $this->pdo->exec("use {$databaseName}");
         $createTableSql=<<<"STR"
 CREATE TABLE IF NOT EXISTS $taskTableName (
- `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+ `id` int unsigned NOT NULL AUTO_INCREMENT,
  `url` varchar(4096) NOT NULL,
- `level` tinyint(3) unsigned NOT NULL COMMENT '任务级别',
- `state` tinyint(3) unsigned NOT NULL COMMENT '0：未分配；1：已分配；6：成功抓取；7：成功抓取但状态码不符合预期；9:抓取失败',
- `http_code` smallint(5) unsigned DEFAULT NULL COMMENT '响应状态码',
- `errno` int(11) DEFAULT NULL COMMENT '错误号',
+ `level` tinyint unsigned NOT NULL COMMENT '任务级别',
+ `state` tinyint unsigned NOT NULL COMMENT '0：未分配；1：已分配；6：成功抓取；7：成功抓取但状态码不符合预期；9:抓取失败',
+ `http_code` smallint unsigned DEFAULT NULL COMMENT '响应状态码',
+ `errno` int DEFAULT NULL COMMENT '错误号',
  `errinfo` varchar(4096) DEFAULT NULL COMMENT '错误信息',
  `extra_info` varbinary(1024) DEFAULT NULL COMMENT '额外信息',
  PRIMARY KEY (`id`),
@@ -191,7 +191,7 @@ STR;
         //不存在抓取过的历史url表则创建
         $createTableSql=<<<"STR"
 CREATE TABLE IF NOT EXISTS $historyUrlsTableName (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+ `id` int unsigned NOT NULL AUTO_INCREMENT,
  `url` varchar(4096) NOT NULL,
  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -200,14 +200,14 @@ STR;
         //不存在监视任务表则创建
         $createTableSql=<<<"STR"
 CREATE TABLE IF NOT EXISTS $monitorTableName (
- `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+ `id` int unsigned NOT NULL AUTO_INCREMENT,
  `url` varchar(4096) NOT NULL,
- `level` tinyint(3) unsigned NOT NULL COMMENT '监视器任务级别',
- `state` tinyint(3) unsigned NOT NULL DEFAULT '0' COMMENT '0：本轮监视未分配 1：本轮监视已分配',
- `http_code` smallint(5) unsigned DEFAULT NULL COMMENT '响应状态码',
- `errno` int(11) DEFAULT NULL COMMENT '错误号',
+ `level` tinyint unsigned NOT NULL COMMENT '监视器任务级别',
+ `state` tinyint unsigned NOT NULL DEFAULT '0' COMMENT '0：本轮监视未分配 1：本轮监视已分配',
+ `http_code` smallint unsigned DEFAULT NULL COMMENT '响应状态码',
+ `errno` int DEFAULT NULL COMMENT '错误号',
  `errinfo` varchar(4096) DEFAULT NULL COMMENT '错误信息',
- `crawl_id` int(10) unsigned DEFAULT NULL COMMENT '对应抓取任务的id',
+ `crawl_id` int unsigned DEFAULT NULL COMMENT '对应抓取任务的id',
  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
 STR;
