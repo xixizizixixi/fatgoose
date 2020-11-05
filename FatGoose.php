@@ -89,6 +89,8 @@ class FatGoose
                 CURLOPT_CONNECTTIMEOUT => 60,  //连接60秒超时
                 CURLOPT_TIMEOUT => 120, //函数执行120秒超时
                 CURLOPT_FOLLOWLOCATION => true,  //跟踪重定向
+                //强制指定http协议使用的版本。不指定则由CURL自己决定，但是使用http/2貌似有bug
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
 
                 //设置Accept-Encoding请求头。同时能对压缩的响应内容解码
                 CURLOPT_ENCODING => 'gzip, deflate, br',
