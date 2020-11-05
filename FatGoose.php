@@ -91,7 +91,7 @@ class FatGoose
                 CURLOPT_FOLLOWLOCATION => true,  //跟踪重定向
 
                 //设置Accept-Encoding请求头。同时能对压缩的响应内容解码
-                CURLOPT_ENCODING => 'gzip, deflate',
+                CURLOPT_ENCODING => 'gzip, deflate, br',
                 //设置用户代理字符串
                 //百度蜘蛛 Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
                 //谷歌机器人 Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
@@ -99,11 +99,11 @@ class FatGoose
                 CURLOPT_HEADEROPT => CURLHEADER_UNIFIED, //向目标服务器和代理服务器的请求都使用CURLOPT_HTTPHEADER定义的请求头
                 //构建更加真实的请求头
                 CURLOPT_HTTPHEADER=> [
-                    'Connection: close',
                     'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-                    'Upgrade-Insecure-Requests: 1',
                     'Accept-Language: en-US,en;q=0.9,de;q=0.8,ja;q=0.7,ru;q=0.6,zh-CN;q=0.5,zh;q=0.4',
                     'Cache-Control: no-cache',
+                    'Connection: close',
+                    'Upgrade-Insecure-Requests: 1',
                 ],
 
                 /*设置代理*/
@@ -1062,8 +1062,14 @@ STR;
             $url=trim($url);//去除一下前后空白字符
             //语法解析url
             $urlInfo=parse_url($url);
-            //如果url带了协议，如http、https或者以//起头不做处理
-            if(isset($urlInfo['scheme']) || substr($url,0,2)=='//') {
+            //如果url带了协议，如http、https不做处理
+            if(isset($urlInfo['scheme']) ) {
+                continue;
+            }
+            //如果url以//起头，前面加上协议
+            if(substr($url,0,2)=='//')
+            {
+                $url=$referenceUrlInfo['scheme'].':'.$url;
                 continue;
             }
             //如果以"/""起头，前面加上协议、域名
