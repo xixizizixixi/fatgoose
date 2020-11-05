@@ -378,6 +378,7 @@ STR;
 
         /*填充信息数组，建立好当前curl资源和信息数组的映射关系*/
         $customInfoArr['task']=$task;//将任务数组添加到信息数组中
+        $customInfoArr['opt']=$optArr;//将curl选项数组添加到信息数组中
         //判断是否设置了回调函数专门为每个curl资源设置特定的选项
         if(!empty($this->generateExtraCurlOpt))
         {
@@ -391,9 +392,9 @@ STR;
                 {
                     $optArr[$k]=$v;
                 }
+                $customInfoArr['opt']=$optArr;//将curl选项数组添加到信息数组中
             }
         }
-        $customInfoArr['opt']=$optArr;//将curl选项数组添加到信息数组中
         curl_setopt_array($curlRes,$optArr);
         //建立curl资源和信息数组的映射关系
         $resCustomInfoMapArr[]=[$curlRes,$customInfoArr];
