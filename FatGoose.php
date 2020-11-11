@@ -27,6 +27,11 @@ class FatGoose
         //形如 [20001=>1234,20002=>1235,20003=>1236,......]
         'tor_ports_pids'=>[],
 
+        //是否使用http代理组
+        'use_http_proxy_group'=>false,
+        //http代理数组，里面每一项是ip和端口构成的字符串，如 '127.0.0.1:7890'
+        'http_proxy_array'=>[],
+
 
         //爬取失败重试次数
         'retry'=>1,
@@ -89,11 +94,12 @@ class FatGoose
                 CURLOPT_CONNECTTIMEOUT => 60,  //连接60秒超时
                 CURLOPT_TIMEOUT => 120, //函数执行120秒超时
                 CURLOPT_FOLLOWLOCATION => true,  //跟踪重定向
-                //强制指定http协议使用的版本。不指定则由CURL自己决定，但是使用http/2貌似有bug
+
+                //强制指定http协议使用的版本为http/1.1。不指定则由CURL自己决定，但是使用http/2貌似有bug
                 CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
 
                 //设置Accept-Encoding请求头。同时能对压缩的响应内容解码
-                CURLOPT_ENCODING => 'gzip, deflate, br',
+                CURLOPT_ENCODING => 'gzip, deflate, identity',
                 //设置用户代理字符串
                 //百度蜘蛛 Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
                 //谷歌机器人 Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
@@ -104,18 +110,23 @@ class FatGoose
                     'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
                     'Accept-Language: en-US,en;q=0.9,de;q=0.8,ja;q=0.7,ru;q=0.6,zh-CN;q=0.5,zh;q=0.4',
                     'Cache-Control: no-cache',
-                    'Connection: close',
+                    'Pragma: no-cache',
+                    'Connection: keep-alive',//使用http/1.1才用此请求头，http/2删除此请求头
                     'Upgrade-Insecure-Requests: 1',
                 ],
 
                 /*设置代理*/
-                //CURLOPT_PROXYTYPE=>CURLPROXY_HTTP,//设置代理类型CURLPROXY_HTTP或CURLPROXY_SOCKS5
+                //CURLOPT_PROXYTYPE=>CURLPROXY_HTTP,//设置代理类型CURLPROXY_HTTP、CURLPROXY_SOCKS5_HOSTNAME或CURLPROXY_SOCKS5。尽量使用CURLPROXY_SOCKS5_HOSTNAME用代理解析主机地址，否则可能因为被墙导致某些主机无法解析报"Could not resolve host"错误
                 //CURLOPT_PROXY=>'127.0.0.1:1080',//设置代理的ip地址和端口号
 
                 /*抓取https页面必要*/
+                //CURLOPT_SSL_VERIFYPEER=>false,
+                //CURLOPT_SSL_VERIFYHOST=>0,
+                //或
                 //CURLOPT_SSL_VERIFYPEER=>true,
                 //CURLOPT_CAINFO=>'/home/cacert.pem',
                 //CURLOPT_SSL_VERIFYHOST=>2,
+
             ],
         //默认数据库配置
         'database'=>
@@ -152,6 +163,7 @@ class FatGoose
     */
     private $preparedPdoStatement;//数组，已经准备好的pdostatement对象
     private $torProxyPortsArr;//tor代理端口数组
+    private $httpProxyArr;//http代理数组
 
     //保存一个回调函数，自动传入自定义信息数组的引用，既可以使用信息数组里面的信息，也可以自己注入一些信息到信息数组中
     //既然参数是引用，所以在定义这个回调函数的时候一定要注意函数的形式
@@ -354,7 +366,7 @@ STR;
             $optArr[CURLOPT_USERAGENT]=($this->config['user_agent'])[$randomInt];
         }
 
-        //设置tor代理相关选项
+        //设置tor代理相关选项(tor代理本质上是socks5代理)
         if($this->config['use_tor'])
         {
             //如果tor代理端口数组为空，则需要填充
@@ -368,13 +380,24 @@ STR;
                 $this->torProxyPortsArr=$tmpArr;
             }
 
-            $optArr[CURLOPT_PROXYTYPE]=CURLPROXY_SOCKS5;
+            $optArr[CURLOPT_PROXYTYPE]=CURLPROXY_SOCKS5_HOSTNAME;
             $optArr[CURLOPT_PROXY]='127.0.0.1';
             $currentPort=array_shift($this->torProxyPortsArr);
             $optArr[CURLOPT_PROXYPORT]=$currentPort;
             //填充自定义信息数组
             $currentPid=($this->config['tor_ports_pids'])[$currentPort];
             $customInfoArr['tor']=['port'=>$currentPort,'pid'=>$currentPid];
+        }
+        //使用http代理组
+        elseif($this->config['use_http_proxy_group'])
+        {
+            //如果http代理数组为空，则需要填充
+            if(empty($this->httpProxyArr))
+            {
+                $this->httpProxyArr=$this->config['http_proxy_array'];
+            }
+            $optArr[CURLOPT_PROXYTYPE]=CURLPROXY_HTTP;
+            $optArr[CURLOPT_PROXY]=array_shift($this->httpProxyArr);
         }
 
 
@@ -870,8 +893,11 @@ STR;
             CURLOPT_TIMEOUT => 120, //函数执行120秒超时
             CURLOPT_FOLLOWLOCATION => true,  //跟踪重定向
 
+            //强制指定http协议使用的版本为http/1.1。不指定则由CURL自己决定，但是使用http/2貌似有bug
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+
             //设置Accept-Encoding请求头。同时能对压缩的响应内容解码
-            CURLOPT_ENCODING => 'gzip, deflate',
+            CURLOPT_ENCODING => 'gzip, deflate, identity',
             //设置用户代理字符串
             //百度蜘蛛 Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)
             //谷歌机器人 Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)
@@ -879,20 +905,24 @@ STR;
             CURLOPT_HEADEROPT => CURLHEADER_UNIFIED, //向目标服务器和代理服务器的请求都使用CURLOPT_HTTPHEADER定义的请求头
             //构建更加真实的请求头
             CURLOPT_HTTPHEADER=> [
-                'Connection: close',
+                'Connection: keep-alive',//使用http/1.1才用此请求头，http/2删除此请求头
                 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
                 'Upgrade-Insecure-Requests: 1',
                 'Accept-Language: en-US,en;q=0.9,de;q=0.8,ja;q=0.7,ru;q=0.6,zh-CN;q=0.5,zh;q=0.4',
                 'Cache-Control: no-cache',
+                'Pragma: no-cache',
             ],
 
             /*设置代理*/
-            //CURLOPT_PROXYTYPE=>CURLPROXY_HTTP,//设置代理类型CURLPROXY_HTTP或CURLPROXY_SOCKS5
+            //CURLOPT_PROXYTYPE=>CURLPROXY_HTTP,//设置代理类型CURLPROXY_HTTP、CURLPROXY_SOCKS5_HOSTNAME或CURLPROXY_SOCKS5。尽量使用CURLPROXY_SOCKS5_HOSTNAME用代理解析主机地址，否则可能因为被墙导致某些主机无法解析报"Could not resolve host"错误
             //CURLOPT_PROXY=>'127.0.0.1:1080',//设置代理的ip地址和端口号
 
             /*抓取https页面必要*/
+            //CURLOPT_SSL_VERIFYPEER=>false,
+            //CURLOPT_SSL_VERIFYHOST=>0,
+            //或
             //CURLOPT_SSL_VERIFYPEER=>true,
-            //CURLOPT_CAINFO=>'c:/cacert.pem',
+            //CURLOPT_CAINFO=>'/home/cacert.pem',
             //CURLOPT_SSL_VERIFYHOST=>2,
         ]
  )
